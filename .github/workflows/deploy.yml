@@ -1,0 +1,88 @@
+name: Build & Deploy App
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  FRONT_S3_BUCKET: ${{ secrets.FRONT_S3_BUCKET }}  # S3 bucket name
+  AWS_REGION: ${{ secrets.AWS_REGION }}           # AWS region
+  EC2_HOST: ${{ secrets.EC2_HOST }}               # EC2 IP/DNS
+  EC2_USER: ${{ secrets.EC2_USER }}               # SSH user on EC2
+
+jobs:
+  build_frontend:
+    name: Build Frontend and Upload to S3
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Frontend Dependencies
+        working-directory: ./front
+        run: npm ci
+
+      - name: Build Frontend
+        working-directory: ./front
+        run: npm run build
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Sync Build to S3
+        run: |
+          aws s3 sync front/build s3://$FRONT_S3_BUCKET \
+            --delete
+
+  deploy_backend:
+    name: Deploy Backend on EC2
+    runs-on: ubuntu-latest
+    needs: build_frontend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+
+      - name: Add SSH known_hosts
+        run: |
+          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+
+      - name: Deploy Backend via SSH
+        run: |
+          ssh -i ~/.ssh/ec2_key $EC2_USER@$EC2_HOST << 'EOF'
+            echo "Deploying backend..."
+            cd ~/ # or the path where you keep backend
+
+            # Option 1: Clone repo directly (fresh)
+            if [ ! -d "KOSMOS-156-back" ]; then
+              git clone https://github.com/vaisak1992/KOSMOS-156.git KOSMOS-156-back
+            fi
+
+            cd KOSMOS-156-back/back
+
+            # Pull latest changes
+            git pull origin main
+
+            # Install and Restart
+            npm install
+            pm2 restart kosmos-backend || pm2 start index.js --name kosmos-backend
+
+            echo "Backend deployed!"
+          EOF
