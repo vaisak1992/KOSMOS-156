@@ -39,7 +39,7 @@ function Pilot() {
         e.preventDefault();
         console.log('on searchl');
 
-        const url = `http://api.openweathermap.org/geo/1.0/direct?q=${searchInput}&appid=dac5da142ad8b0a33ebf74bd639fa99e`;
+        const url = `https://api.openweathermap.org/geo/1.0/direct?q=${searchInput}&appid=dac5da142ad8b0a33ebf74bd639fa99e`;
 
         axios.get(url)
             .then((res) => {
