@@ -45,6 +45,12 @@ jobs:
           aws s3 sync front/build s3://$FRONT_S3_BUCKET \
             --delete
 
+      - name: Invalidate CloudFront Cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
+
   deploy_backend:
     name: Deploy Backend on EC2
     runs-on: ubuntu-latest
