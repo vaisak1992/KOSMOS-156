@@ -113,8 +113,8 @@ jobs:
             sudo docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest || exit 1
 
             echo "Stopping old container..."
-            docker stop kosmos-backend || true
-            docker rm kosmos-backend || true
+            sudo docker stop kosmos-backend || true
+            sudo docker rm kosmos-backend || true
 
             echo "Starting new container..."
             docker run -d \
