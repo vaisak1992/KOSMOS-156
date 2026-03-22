@@ -61,7 +61,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 🔐 AWS Login
+      # 🔐 Configure AWS
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -71,18 +71,22 @@ jobs:
 
       # 🐳 Login to ECR
       - name: Login to ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      # 🏗️ Build & Push Docker Image
+      # 🏗️ Build & Push Docker Image (FIXED)
       - name: Build, Tag, Push Docker Image
         working-directory: ./back
         env:
-          ECR_REGISTRY: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: latest
         run: |
+          echo "Using registry: $ECR_REGISTRY"
+
           docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
+
           docker tag $ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
       # 🔑 SSH Setup
@@ -99,7 +103,7 @@ jobs:
       # 🚀 Deploy on EC2
       - name: Deploy Backend on EC2
         env:
-          ECR_REGISTRY: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
         run: |
           ssh -i ~/.ssh/ec2_key $EC2_USER@$EC2_HOST << EOF
             echo "Logging into ECR..."
