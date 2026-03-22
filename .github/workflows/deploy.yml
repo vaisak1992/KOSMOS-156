@@ -107,7 +107,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/ec2_key $EC2_USER@$EC2_HOST << EOF
             echo "Logging into ECR..."
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+            aws ecr get-login-password --region $AWS_REGION | sudo docker login --username AWS --password-stdin $ECR_REGISTRY
 
             echo "Pulling latest image..."
             sudo docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest || exit 1
