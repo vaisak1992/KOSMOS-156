@@ -1,10 +1,8 @@
 name: Build & Deploy App
-
 on:
   push:
     branches:
       - main
-
 env:
   FRONT_S3_BUCKET: ${{ secrets.FRONT_S3_BUCKET }}
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -12,68 +10,52 @@ env:
   EC2_USER: ${{ secrets.EC2_USER }}
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-
 jobs:
   build_frontend:
     name: Build Frontend and Upload to S3
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
-
       - name: Install Frontend Dependencies
         working-directory: ./front
         run: npm ci
-
       - name: Build Frontend
         working-directory: ./front
         run: CI=false npm run build
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
       - name: Sync Build to S3
         run: |
           aws s3 sync front/build s3://$FRONT_S3_BUCKET --delete
-
       - name: Invalidate CloudFront Cache
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
             --paths "/*"
-
   deploy_backend:
     name: Build, Push to ECR & Deploy to EC2
     runs-on: ubuntu-latest
     needs: build_frontend
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
-      # 🔐 Configure AWS
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
-      # 🐳 Login to ECR
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v1
-
-      # 🏗️ Build & Push Docker Image (FIXED)
       - name: Build, Tag, Push Docker Image
         working-directory: ./back
         env:
@@ -82,25 +64,17 @@ jobs:
           IMAGE_TAG: latest
         run: |
           echo "Using registry: $ECR_REGISTRY"
-
           docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
-
           docker tag $ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
-      # 🔑 SSH Setup
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
-
       - name: Add SSH known_hosts
         run: |
           ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
-
-      # 🚀 Deploy on EC2
       - name: Deploy Backend on EC2
         env:
           ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
@@ -108,20 +82,44 @@ jobs:
           ssh -i ~/.ssh/ec2_key $EC2_USER@$EC2_HOST << EOF
             echo "Logging into ECR..."
             aws ecr get-login-password --region $AWS_REGION | sudo docker login --username AWS --password-stdin $ECR_REGISTRY
-
             echo "Pulling latest image..."
             sudo docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest || exit 1
-
             echo "Stopping old container..."
             sudo docker stop kosmos-backend || true
             sudo docker rm kosmos-backend || true
-
             echo "Starting new container..."
             sudo docker run -d \
               --name kosmos-backend \
               -p 80:5000 \
               --restart unless-stopped \
               $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
             echo "Deployment successful!"
           EOF
+
+  notify:
+    name: Send Telegram Notification
+    runs-on: ubuntu-latest
+    needs: [build_frontend, deploy_backend]
+    if: always()
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Determine Status
+        id: status
+        run: |
+          if [ "${{ needs.build_frontend.result }}" == "success" ] && [ "${{ needs.deploy_backend.result }}" == "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+      - name: Send Notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python notify.py ${{ steps.status.outputs.status }}
