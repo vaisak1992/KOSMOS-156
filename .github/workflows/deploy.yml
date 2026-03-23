@@ -117,9 +117,9 @@ jobs:
             sudo docker rm kosmos-backend || true
 
             echo "Starting new container..."
-            docker run -d \
+            sudo docker run -d \
               --name kosmos-backend \
-              -p 5000:5000 \
+              -p 80:5000 \
               --restart unless-stopped \
               $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
