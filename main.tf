@@ -7,9 +7,11 @@ resource "random_id" "suffix" {
   byte_length = 4
 }
 
-# Create S3 bucket
+# Create S3 bucket (with force destroy)
 resource "aws_s3_bucket" "bucket" {
   bucket = "test-alpha-project-${random_id.suffix.hex}"
+
+  force_destroy = true   # 👈 IMPORTANT: allows deletion even if bucket has files
 
   tags = {
     Name        = "test-alpha-project"
@@ -26,7 +28,7 @@ resource "aws_s3_bucket_versioning" "versioning" {
   }
 }
 
-# Ownership controls (recommended)
+# Ownership controls
 resource "aws_s3_bucket_ownership_controls" "ownership" {
   bucket = aws_s3_bucket.bucket.id
 
@@ -35,7 +37,7 @@ resource "aws_s3_bucket_ownership_controls" "ownership" {
   }
 }
 
-# Disable public access block (to allow website access)
+# Allow public access (for website)
 resource "aws_s3_bucket_public_access_block" "block_public" {
   bucket = aws_s3_bucket.bucket.id
 
@@ -45,7 +47,7 @@ resource "aws_s3_bucket_public_access_block" "block_public" {
   restrict_public_buckets = false
 }
 
-# Enable static website hosting
+# Static website hosting
 resource "aws_s3_bucket_website_configuration" "website" {
   bucket = aws_s3_bucket.bucket.id
 
@@ -58,7 +60,7 @@ resource "aws_s3_bucket_website_configuration" "website" {
   }
 }
 
-# Bucket policy to allow public read
+# Public read policy
 resource "aws_s3_bucket_policy" "public_read" {
   bucket = aws_s3_bucket.bucket.id
 
