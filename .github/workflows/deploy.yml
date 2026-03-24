@@ -1,8 +1,9 @@
 name: Build & Deploy App
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch: 
+#  push:
+#    branches:
+#     - main
 env:
   FRONT_S3_BUCKET: ${{ secrets.FRONT_S3_BUCKET }}
   AWS_REGION: ${{ secrets.AWS_REGION }}
