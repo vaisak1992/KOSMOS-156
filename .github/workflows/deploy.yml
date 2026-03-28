@@ -91,7 +91,7 @@ jobs:
             echo "Starting new container..."
             sudo docker run -d \
               --name kosmos-backend \
-              -p 80:5000 \
+              -p 3000:5000 \
               --restart unless-stopped \
               $ECR_REGISTRY/$ECR_REPOSITORY:latest
             echo "Deployment successful!"
